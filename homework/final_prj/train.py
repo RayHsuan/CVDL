@@ -10,7 +10,8 @@ from keras.optimizers import Adam
 from keras.callbacks import TensorBoard, ModelCheckpoint, ReduceLROnPlateau, EarlyStopping
 
 from yolo3.model import preprocess_true_boxes, yolo_body, tiny_yolo_body, yolo_loss
-from yolo3.utils import get_random_data
+from yolo3.utils import get_random_data, get_GaussianBlur_data
+import random
 
 
 def _main():
@@ -172,9 +173,17 @@ def data_generator(annotation_lines, batch_size, input_shape, anchors, num_class
         for b in range(batch_size):
             if i==0:
                 np.random.shuffle(annotation_lines)
-            image, box = get_random_data(annotation_lines[i], input_shape, random=True)
-            image_data.append(image)
-            box_data.append(box)
+            rand = random.randint(0,9)
+
+            if rand <= 4:
+                image, box = get_random_data(annotation_lines[i], input_shape, random=True)
+                image_data.append(image)
+                box_data.append(box)
+            else:
+                img_aug, box_aug = get_GaussianBlur_data(annotation_lines[i], input_shape)
+                image_data.append(img_aug)
+                box_data.append(box_aug)
+
             i = (i+1) % n
         image_data = np.array(image_data)
         box_data = np.array(box_data)

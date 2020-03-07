@@ -17,6 +17,7 @@ from yolo3.model import yolo_eval, yolo_body, tiny_yolo_body
 from yolo3.utils import letterbox_image
 import os
 from keras.utils import multi_gpu_model
+from tqdm import tqdm
 
 class YOLO(object):
     _defaults = {
@@ -101,6 +102,8 @@ class YOLO(object):
 
     def detect_image(self, image):
         start = timer()
+        #20200228 Kent evaluation method
+        str_result = ''
 
         if self.model_image_size != (None, None):
             assert self.model_image_size[0]%32 == 0, 'Multiples of 32 required'
@@ -112,7 +115,7 @@ class YOLO(object):
             boxed_image = letterbox_image(image, new_image_size)
         image_data = np.array(boxed_image, dtype='float32')
 
-        print(image_data.shape)
+        #print(image_data.shape)
         image_data /= 255.
         image_data = np.expand_dims(image_data, 0)  # Add batch dimension.
 
@@ -124,9 +127,9 @@ class YOLO(object):
                 K.learning_phase(): 0
             })
 
-        print('Found {} boxes for {}'.format(len(out_boxes), 'img'))
+        #print('Found {} boxes for {}'.format(len(out_boxes), 'img'))
 
-        font = ImageFont.truetype(font='font/FiraMono-Medium.otf', size=np.floor(3e-2 * image.size[1] + 0.5).astype('int32'))
+        font = ImageFont.truetype('G:/GitHub/CVDL/homework/final_prj/font/FiraMono-Medium.otf', size=np.floor(3e-2 * image.size[1] + 0.5).astype('int32'))
         thickness = (image.size[0] + image.size[1]) // 300
 
         for i, c in reversed(list(enumerate(out_classes))):
@@ -143,7 +146,9 @@ class YOLO(object):
             left = max(0, np.floor(left + 0.5).astype('int32'))
             bottom = min(image.size[1], np.floor(bottom + 0.5).astype('int32'))
             right = min(image.size[0], np.floor(right + 0.5).astype('int32'))
-            print(label, (left, top), (right, bottom))
+            #print(label, (left, top), (right, bottom))
+            #20200228 Kent evaluation method
+            str_result += predicted_class + ',' + str(score) + '#' + str(left) + ',' + str(top) + ',' + str(right) + ',' + str(bottom) + ';'
 
             if top - label_size[1] >= 0:
                 text_origin = np.array([left, top - label_size[1]])
@@ -162,18 +167,22 @@ class YOLO(object):
             del draw
 
         end = timer()
-        print(end - start)
+        #print(end - start)
+        #return image, str_result
+        #return image, out_boxes, out_scores, out_classes
         return image
 
     def close_session(self):
         self.sess.close()
 
-def detect_video(yolo, video_path, output_path=""):
+def detect_video(yolo_model,video_path, output_path=""):
     import cv2
     vid = cv2.VideoCapture(video_path)
     if not vid.isOpened():
         raise IOError("Couldn't open webcam or video")
-    video_FourCC    = int(vid.get(cv2.CAP_PROP_FOURCC))
+    #video_FourCC    = int(vid.get(cv2.CAP_PROP_FOURCC))
+    video_FourCC    = cv2.VideoWriter_fourcc(*'XVID')
+    nb_frames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
     video_fps       = vid.get(cv2.CAP_PROP_FPS)
     video_size      = (int(vid.get(cv2.CAP_PROP_FRAME_WIDTH)),
                         int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT)))
@@ -185,11 +194,15 @@ def detect_video(yolo, video_path, output_path=""):
     curr_fps = 0
     fps = "FPS: ??"
     prev_time = timer()
-    while True:
+    for i in tqdm(range(nb_frames)):
+        # 不能用while true 当视频读完后不会停止迭代
         return_value, frame = vid.read()
-        image = Image.fromarray(frame)
-        image = yolo.detect_image(image)
-        result = np.asarray(image)
+        if frame is None:
+            continue
+        else:
+            image = Image.fromarray(frame)
+            image = yolo_model.detect_image(image)
+            result = np.asarray(image)
         curr_time = timer()
         exec_time = curr_time - prev_time
         prev_time = curr_time
@@ -201,11 +214,11 @@ def detect_video(yolo, video_path, output_path=""):
             curr_fps = 0
         cv2.putText(result, text=fps, org=(3, 15), fontFace=cv2.FONT_HERSHEY_SIMPLEX,
                     fontScale=0.50, color=(255, 0, 0), thickness=2)
-        cv2.namedWindow("result", cv2.WINDOW_NORMAL)
-        cv2.imshow("result", result)
+        #cv2.namedWindow("result", cv2.WINDOW_NORMAL)
+        #cv2.imshow("result", result)
         if isOutput:
             out.write(result)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-    yolo.close_session()
+    yolo_model.close_session()
 

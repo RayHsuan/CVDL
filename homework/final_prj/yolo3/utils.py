@@ -5,6 +5,10 @@ from functools import reduce
 from PIL import Image
 import numpy as np
 from matplotlib.colors import rgb_to_hsv, hsv_to_rgb
+import cv2
+import imgaug as ia
+import imgaug.augmenters as iaa
+from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
 
 def compose(*funcs):
     """Compose arbitrarily many functions, evaluated left to right.
@@ -35,6 +39,11 @@ def rand(a=0, b=1):
 
 def get_random_data(annotation_line, input_shape, random=True, max_boxes=20, jitter=.3, hue=.1, sat=1.5, val=1.5, proc_img=True):
     '''random preprocessing for real-time data augmentation'''
+    '''获取真实的数据根据输入的尺寸对原始数据进行缩放处理得到input_shape大小的数据图片，
+        随机进行图片的翻转，标记数据数据也根据比例改变
+        annotation_line： 单条图片的信息的列表
+        input_shape：输入的尺寸
+    '''
     line = annotation_line.split()
     image = Image.open(line[0])
     iw, ih = image.size
@@ -119,3 +128,50 @@ def get_random_data(annotation_line, input_shape, random=True, max_boxes=20, jit
         box_data[:len(box)] = box
 
     return image_data, box_data
+
+def get_GaussianBlur_data(annotation_line, input_shape=(416,416), proc_img=True, max_boxes=20, sigma = 2):
+    line = annotation_line.split()
+    image = Image.open(line[0])
+    iw, ih = image.size
+    h, w = input_shape
+    box = np.array([np.array(list(map(int,box.split(',')))) for box in line[1:]])
+    
+    # resize image
+    scale = min(w/iw, h/ih)
+    nw = int(iw*scale)
+    nh = int(ih*scale)
+    dx = (w-nw)//2
+    dy = (h-nh)//2
+    image_data=0
+    
+    proc_img=True
+    if proc_img:
+        image = image.resize((nw,nh), Image.BICUBIC)
+        new_image = Image.new('RGB', (w,h), (128,128,128))
+        new_image.paste(image, (dx, dy))
+    
+    # correct boxes
+    max_boxes=20
+    box_data = np.zeros((max_boxes,5))
+    if len(box)>0:
+        np.random.shuffle(box)
+        if len(box)>max_boxes: box = box[:max_boxes]
+        box[:, [0,2]] = box[:, [0,2]]*scale + dx
+        box[:, [1,3]] = box[:, [1,3]]*scale + dy
+        box_data[:len(box)] = box
+    
+    img = cv2.cvtColor(np.asarray(new_image), cv2.COLOR_BGR2RGB) #Cv2讀進來是BGR，轉成RGB
+    blurer = iaa.GaussianBlur(sigma) # 高斯模糊圖像( sigma of 2)
+    img_aug = blurer.augment_image(img) 
+    image_data = np.array(img_aug)/255.
+
+    return image_data, box_data
+
+
+
+
+
+
+
+
+
